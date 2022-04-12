@@ -65,6 +65,51 @@ macro_rules! shared_array {
     }};
 }
 
+
+#[macro_export]
+macro_rules! my_shared_array {
+    ($array_type:ty; [$len_x:expr; $len_y:expr]) => {{
+        #[$crate::gpu_only]
+        #[inline(always)]
+        unsafe fn my_shared_2d_array() -> &'static mut [[$array_type; $len_y]; $len_x] {
+            use ::core::{cell::UnsafeCell, mem::MaybeUninit};
+            struct SyncWrapper(UnsafeCell<MaybeUninit<[[$array_type; $len_y]; $len_x]>>);
+            // SAFETY: it is up to the user to verify sound shared memory usage, we cannot
+            // fundamentally check it for soundness.
+            unsafe impl Send for SyncWrapper {}
+            // SAFETY: see above
+            unsafe impl Sync for SyncWrapper {}
+
+            // the initializer is discarded when declaring shared globals, so it is unimportant.
+            #[$crate::address_space(shared)]
+            static SHARED: SyncWrapper = SyncWrapper(UnsafeCell::new(MaybeUninit::uninit()));
+            // MaybeUninit::slice_assume_init_mut
+            &mut *SHARED.0.get().as_mut().expect("As mut goes wrong").as_mut_ptr()
+        }
+        my_shared_2d_array()
+    }};
+    ($array_type:ty; $len:expr) => {{
+        #[$crate::gpu_only]
+        #[inline(always)]
+        unsafe fn my_shared_array() -> &'static mut [$array_type; $len] {
+            use ::core::{cell::UnsafeCell, mem::MaybeUninit};
+            struct SyncWrapper(UnsafeCell<MaybeUninit<[$array_type; $len]>>);
+            // SAFETY: it is up to the user to verify sound shared memory usage, we cannot
+            // fundamentally check it for soundness.
+            unsafe impl Send for SyncWrapper {}
+            // SAFETY: see above
+            unsafe impl Sync for SyncWrapper {}
+
+            // the initializer is discarded when declaring shared globals, so it is unimportant.
+            #[$crate::address_space(shared)]
+            static SHARED: SyncWrapper = SyncWrapper(UnsafeCell::new(MaybeUninit::uninit()));
+            // MaybeUninit::slice_assume_init_mut
+            &mut *SHARED.0.get().as_mut().expect("As mut goes wrong").as_mut_ptr()
+        }
+        my_shared_array()
+    }};
+}
+
 /// Gets a pointer to the dynamic shared memory that was allocated by the caller of the kernel. The
 /// data is left uninitialized.
 ///
